@@ -79,8 +79,6 @@ Plugin.create(:mikutter_datasource_rss) {
         }
         media.uniq!
 
-        p "urls: #{urls}"
-        p "media: #{media}"
         # Entity 追加
         msg[:entities] = {:urls => urls, :media => media}
 
