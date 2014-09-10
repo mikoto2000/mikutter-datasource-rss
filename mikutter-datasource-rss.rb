@@ -49,6 +49,8 @@ Plugin.create(:mikutter_datasource_rss) {
         msg[:created] = entry.last_updated
         msg[:modified] = Time.now
 
+        # Entity 追加
+        msg[:entities] = {:urls=>[{:expanded_url=>msg[:rss_feed_url]}]}
 
         # ユーザ
         image_url = if feed.image.empty?
