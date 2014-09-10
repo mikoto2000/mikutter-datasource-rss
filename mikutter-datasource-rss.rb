@@ -49,8 +49,40 @@ Plugin.create(:mikutter_datasource_rss) {
         msg[:created] = entry.last_updated
         msg[:modified] = Time.now
 
+        # フィードの content と description から URL を抽出
+        entry_content = entry.content.force_encoding("utf-8") 
+        entry_text = description + entry_content
+        content_urls = URI.extract(entry_text, ["http", "https"])
+
+        # 非画像 URL 抽出, urls 作成
+        urls = []
+        content_urls.each_with_index { |url, i|
+          image_url = Plugin[:openimg].get_image_url(url)
+
+          unless image_url then
+            # 画像でないなら urls へ
+            urls.push({:expanded_url => url, :indices=>[i,0]})
+          end
+        }
+        urls.uniq!
+
+        # 画像 URL 抽出
+        media_url = entry_text.scan(/(<img.*?src=\")(.*?)(\".*?>)/)
+        media_url = media_url.collect { |matched|
+          matched[1]
+        }
+
+        # media 作成
+        media = []
+        media_url.each_with_index { |url, i|
+          media.push({:media_url => url, :indices=>[i,0]})
+        }
+        media.uniq!
+
+        p "urls: #{urls}"
+        p "media: #{media}"
         # Entity 追加
-        msg[:entities] = {:urls=>[{:expanded_url=>msg[:rss_feed_url]}]}
+        msg[:entities] = {:urls => urls, :media => media}
 
         # ユーザ
         image_url = if feed.image.empty?
