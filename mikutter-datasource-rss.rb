@@ -20,6 +20,12 @@ Plugin.create(:mikutter_datasource_rss) {
     :mikutter => ["みくったーちゃん", MUI::Skin.get("icon.png")],
   }
 
+  RSS_LOAD_PERIOD = "datasource_rss_load_period"
+  RSS_PERIOD = "datasource_rss_period"
+  RSS_DROP_DAY = "datasource_rss_drop_day"
+  RSS_REVERSE = "datasource_rss_reverse"
+  RSS_IS_LOOP = "datasource_rss_loop"
+  RSS_ICON = "datasource_rss_icon"
 
   class FetchLooper < Looper
     def initialize(url)
@@ -65,7 +71,7 @@ Plugin.create(:mikutter_datasource_rss) {
 
         # ユーザ
         image_url = if feed.image.empty?
-          ICON_COLORS[UserConfig[:datasource_rss_icon]][1]
+          ICON_COLORS[UserConfig["#{RSS_ICON}_#{@url}".to_sym]][1]
         else
           feed.image
         end
@@ -84,8 +90,9 @@ Plugin.create(:mikutter_datasource_rss) {
 
 
     def timer_set
-      notice("#{@url} Timer set #{UserConfig[:datasource_rss_period]}")
-      UserConfig[:datasource_rss_period]
+      rss_period = UserConfig["#{RSS_PERIOD}_#{@url}".to_sym]
+      notice("#{@url} Timer set #{rss_period}")
+      rss_period
     end
 
 
@@ -95,9 +102,9 @@ Plugin.create(:mikutter_datasource_rss) {
 
         # パラメータ変更確認
         args = [@url,
-                UserConfig[:datasource_rss_loop],
-                UserConfig[:datasource_rss_drop_day],
-                UserConfig[:datasource_rss_reverse]]
+                UserConfig["#{RSS_IS_LOOP}_#{@url}".to_sym],
+                UserConfig["#{RSS_DROP_DAY}_#{@url}".to_sym],
+                UserConfig["#{RSS_REVERSE}_#{@url}".to_sym]]
 
         # パラメータが変わっていた場合、取得オブジェクトを再生成
         if !args[0].empty? && (@prev_args != args)
@@ -132,7 +139,7 @@ Plugin.create(:mikutter_datasource_rss) {
             # RSSを読み込む
             @fetcher.load_rss 
 
-            UserConfig[:datasource_rss_load_period] / UserConfig[:datasource_rss_period]
+            UserConfig["#{RSS_LOAD_PERIOD}_#{@url}".to_sym] / UserConfig["#{RSS_PERIOD}_#{@url}".to_sym]
           else
             @load_counter - 1
           end
@@ -166,15 +173,15 @@ Plugin.create(:mikutter_datasource_rss) {
   on_boot { |service|
     begin
       UserConfig[:datasource_rss_url] ||= []
-      UserConfig[:datasource_rss_period] ||= 1 * 60
-      UserConfig[:datasource_rss_load_period] ||= 1 * 60
-      UserConfig[:datasource_rss_loop] ||= false
-      UserConfig[:datasource_rss_drop_day] ||= 30
-      UserConfig[:datasource_rss_reverse] ||= false
-      UserConfig[:datasource_rss_icon] ||= 0
-
 
       UserConfig[:datasource_rss_url].each { |i|
+        UserConfig["#{RSS_PERIOD}_#{i}".to_sym] ||= 1 * 60
+        UserConfig["#{RSS_LOAD_PERIOD}_#{i}".to_sym] ||= 1 * 60
+        UserConfig["#{RSS_IS_LOOP}_#{i}".to_sym] ||= false
+        UserConfig["#{RSS_DROP_DAY}_#{i}".to_sym] ||= 30
+        UserConfig["#{RSS_REVERSE}_#{i}".to_sym] ||= false
+        UserConfig["#{RSS_ICON}_#{i}".to_sym] ||= :black
+
         FetchLooper.new(i).start
       }
     rescue => e
@@ -188,18 +195,23 @@ Plugin.create(:mikutter_datasource_rss) {
   settings("RSS") {
     begin
         settings("基本設定") {
-          multi("Feed URL", :datasource_rss_url)
+          multi("Feed URL(追加、削除を行ったら設定画面を開き直してください)", :datasource_rss_url)
+        }
+        settings("フィード設定") {
+          UserConfig[:datasource_rss_url].each_with_index { |url, i|
+            settings(url) {
+              adjustment("RSS取得間隔（秒）", get_sym(RSS_LOAD_PERIOD, i), 1, 600)
+              adjustment("メッセージ出力間隔（秒）", get_sym(RSS_PERIOD, i), 1, 600)
+              adjustment("一定期間より前のフィードは流さない（日）", get_sym(RSS_DROP_DAY, i), 1, 365)
+              boolean("新しい記事を優先する", get_sym(RSS_REVERSE, i))
+              boolean("ループさせる", get_sym(RSS_IS_LOOP, i))
 
-          select("アイコンの色", :datasource_rss_icon, ICON_COLORS.inject({}){ |result, kv|
-            result[kv[0]] = kv[1][0]
-            result
-          })
-
-          adjustment("RSS取得間隔（秒）", :datasource_rss_load_period, 1, 600)
-          adjustment("メッセージ出力間隔（秒）", :datasource_rss_period, 1, 600)
-          adjustment("一定期間より前のフィードは流さない（日）", :datasource_rss_drop_day, 1, 365)
-          boolean("新しい記事を優先する", :datasource_rss_reverse)
-          boolean("ループさせる", :datasource_rss_loop)
+              select("アイコンの色", get_sym(RSS_ICON, i), ICON_COLORS.inject({}){ |result, kv|
+                result[kv[0]] = kv[1][0]
+                result
+              })
+            }
+          }
         }
     rescue => e
       puts e.to_s
@@ -207,6 +219,9 @@ Plugin.create(:mikutter_datasource_rss) {
     end 
   }
 
+  def get_sym(setting, index)
+    return "#{setting}_#{UserConfig[:datasource_rss_url][index]}".to_sym
+  end
 
   # リンクの処理
   Message::Entity.addlinkrule(:rss, /\[記事を読む\]/) { |segment|
