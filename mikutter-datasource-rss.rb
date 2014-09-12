@@ -1,12 +1,6 @@
 #coding: utf-8
 
 
-# IDからシンボルを作る
-def sym(base, id)
-  "#{base}_#{id}".to_sym
-end
-
- 
 Plugin.create(:mikutter_datasource_rss) {
   require File.join(File.dirname(__FILE__), "rss_fetcher.rb")
   require File.join(File.dirname(__FILE__), "looper.rb")
@@ -28,16 +22,16 @@ Plugin.create(:mikutter_datasource_rss) {
 
 
   class FetchLooper < Looper
-    def initialize(id)
+    def initialize(url)
       super()
-      @id = id
+      @url = url
 
       @user = User.new(:id => -3939, :idname => "RSS")
     end
 
 
     # フィードをメッセージに変換する
-    def create_message(id, feed, entry)
+    def create_message(url, feed, entry)
       begin
         feed_title = feed.title.force_encoding("utf-8") 
         entry_title = entry.title.force_encoding("utf-8") 
@@ -71,7 +65,7 @@ Plugin.create(:mikutter_datasource_rss) {
 
         # ユーザ
         image_url = if feed.image.empty?
-          ICON_COLORS[UserConfig[sym("datasource_rss_icon", id)]][1]
+          ICON_COLORS[UserConfig[:datasource_rss_icon]][1]
         else
           feed.image
         end
@@ -90,35 +84,30 @@ Plugin.create(:mikutter_datasource_rss) {
 
 
     def timer_set
-      notice("#{@id} Timer set #{UserConfig[sym("datasource_rss_period", @id)]}")
-      UserConfig[sym("datasource_rss_period", @id)]
+      notice("#{@url} Timer set #{UserConfig[:datasource_rss_period]}")
+      UserConfig[:datasource_rss_period]
     end
 
 
     def proc
       begin
-        notice("#{@id} proc start")
+        notice("#{@url} proc start")
 
         # パラメータ変更確認
-        args = [
-          "datasource_rss_url",
-          "datasource_rss_loop",
-          "datasource_rss_drop_day",
-          "datasource_rss_reverse",
-        ].map { |_|
-          UserConfig[sym(_, @id)]
-        }
+        args = [@url,
+                UserConfig[:datasource_rss_loop],
+                UserConfig[:datasource_rss_drop_day],
+                UserConfig[:datasource_rss_reverse]]
 
         # パラメータが変わっていた場合、取得オブジェクトを再生成
         if !args[0].empty? && (@prev_args != args)
-          notice("#{@id} proc reload")
+          notice("#{@url} proc reload")
 
           @prev_args = args
 
-          @fetcher = RSSFetcher.new(*args, lambda { |*args| create_message(@id, *args) })
+          @fetcher = RSSFetcher.new(*args, lambda { |*args| create_message(@url, *args) })
           @load_counter = 0
         end
-
 
         if @fetcher
           # データ取得
@@ -127,22 +116,23 @@ Plugin.create(:mikutter_datasource_rss) {
 
           # エントリーあり
           if msg
-            notice("#{@id} send to datasource")
+            notice("#{@url} send to datasource")
+
             msgs = Messages.new
             msgs << msg
 
-            Plugin.call(:extract_receive_message, "rss/#{@id}".to_sym, msgs)
+            Plugin.call(:extract_receive_message, "#{@url}".to_sym, msgs)
             Plugin.call(:extract_receive_message, :rss, msgs)
           end
 
           # RSSロードカウンタ満了
           @load_counter = if @load_counter <= 0
-            notice("#{@id} RSS get")
+            notice("#{@url} RSS get")
 
             # RSSを読み込む
             @fetcher.load_rss 
 
-            UserConfig[sym("datasource_rss_load_period", @id)] / UserConfig[sym("datasource_rss_period", @id)]
+            UserConfig[:datasource_rss_load_period] / UserConfig[:datasource_rss_period]
           else
             @load_counter - 1
           end
@@ -160,9 +150,8 @@ Plugin.create(:mikutter_datasource_rss) {
     begin
       datasources[:rss] = "すべてのRSSフィード"
 
-      10.times { |i|
-        id = i + 1
-        datasources["rss/#{id}".to_sym] = "RSSフィード#{id}"
+      UserConfig[:datasource_rss_url].each { |url|
+        datasources["#{url}".to_sym] = "RSSフィード : #{url}"
       }
 
       [datasources]
@@ -176,23 +165,17 @@ Plugin.create(:mikutter_datasource_rss) {
   # 起動時
   on_boot { |service|
     begin
-      10.times { |i|
-        id = i + 1
-
-        UserConfig[sym("datasource_rss_period", id)] ||= 1 * 60
-        UserConfig[sym("datasource_rss_load_period", id)] ||= 1 * 60
-        UserConfig[sym("datasource_rss_url", id)] ||= ""
-        UserConfig[sym("datasource_rss_loop", id)] ||= false
-        UserConfig[sym("datasource_rss_drop_day", id)] ||= 30
-        UserConfig[sym("datasource_rss_reverse", id)] ||= false
-        UserConfig[sym("datasource_rss_icon", id)] ||= 0
-      }
+      UserConfig[:datasource_rss_url] ||= []
+      UserConfig[:datasource_rss_period] ||= 1 * 60
+      UserConfig[:datasource_rss_load_period] ||= 1 * 60
+      UserConfig[:datasource_rss_loop] ||= false
+      UserConfig[:datasource_rss_drop_day] ||= 30
+      UserConfig[:datasource_rss_reverse] ||= false
+      UserConfig[:datasource_rss_icon] ||= 0
 
 
-      10.times { |i|
-        id = i + 1
-
-        FetchLooper.new(id).start
+      UserConfig[:datasource_rss_url].each { |i|
+        FetchLooper.new(i).start
       }
     rescue => e
       puts e.to_s
@@ -204,24 +187,20 @@ Plugin.create(:mikutter_datasource_rss) {
   # 設定
   settings("RSS") {
     begin
-      10.times { |i|
-        id = i + 1
+        settings("基本設定") {
+          multi("Feed URL", :datasource_rss_url)
 
-        settings("フィード#{id}") {
-          input("URL", sym("datasource_rss_url", id))
-
-          select("アイコンの色", sym("datasource_rss_icon", id), ICON_COLORS.inject({}){ |result, kv|
+          select("アイコンの色", :datasource_rss_icon, ICON_COLORS.inject({}){ |result, kv|
             result[kv[0]] = kv[1][0]
             result
           })
 
-          adjustment("RSS取得間隔（秒）", sym("datasource_rss_load_period", id), 1, 600)
-          adjustment("メッセージ出力間隔（秒）", sym("datasource_rss_period", id), 1, 600)
-          adjustment("一定期間より前のフィードは流さない（日）", sym("datasource_rss_drop_day", id), 1, 365)
-          boolean("新しい記事を優先する", sym("datasource_rss_reverse", id))
-          boolean("ループさせる", sym("datasource_rss_loop", id))
+          adjustment("RSS取得間隔（秒）", :datasource_rss_load_period, 1, 600)
+          adjustment("メッセージ出力間隔（秒）", :datasource_rss_period, 1, 600)
+          adjustment("一定期間より前のフィードは流さない（日）", :datasource_rss_drop_day, 1, 365)
+          boolean("新しい記事を優先する", :datasource_rss_reverse)
+          boolean("ループさせる", :datasource_rss_loop)
         }
-      }
     rescue => e
       puts e.to_s
       puts e.backtrace
