@@ -26,6 +26,11 @@ Plugin.create(:mikutter_datasource_rss) {
   RSS_REVERSE = "datasource_rss_reverse"
   RSS_IS_LOOP = "datasource_rss_loop"
   RSS_ICON = "datasource_rss_icon"
+  RSS_SHOW_FEED_TITLE = "datasource_rss_show_feed_title"
+  RSS_SHOW_ENTRY_TITLE = "datasource_rss_show_entry_title"
+  RSS_SHOW_ENTRY_DESCRIPTION = "datasource_rss_show_entry_description"
+  RSS_SHOW_IMAGE, = "datasource_rss_show_image"
+  RSS_MAX_IMAGE_NUM = "datasource_rss_max_image_num"
 
   class FetchLooper < Looper
     def initialize(url)
@@ -40,10 +45,29 @@ Plugin.create(:mikutter_datasource_rss) {
     def create_message(url, feed, entry)
       begin
         feed_title = feed.title.force_encoding("utf-8") 
-        entry_title = entry.title.force_encoding("utf-8") 
         description = Sanitize.clean(entry.description)
 
-        msg = Message.new(:message => ("【" + feed_title + "】\n" + entry_title + "\n\n" + description + "\n\n[記事を読む]"), :system => true)
+        # 出力テキスト初期化
+        text = ""
+
+        # フィードタイトル表示する？
+        if UserConfig["#{RSS_SHOW_FEED_TITLE}_#{@url}".to_sym] then
+          text = add_message(text, "【#{feed_title}】")
+        end
+
+        # エントリタイトル表示する？
+        if UserConfig["#{RSS_SHOW_ENTRY_TITLE}_#{@url}".to_sym] then
+          text = add_message(text, entry.title.force_encoding("utf-8"))
+        end
+
+        # 内容表示する？
+        if UserConfig["#{RSS_SHOW_ENTRY_TITLE}_#{@url}".to_sym] then
+          text = add_message(text, description)
+        end
+
+        text = add_message(text, "[記事を読む]")
+
+        msg = Message.new(:message => text, :system => true)
 
         msg[:rss_feed_url] = entry.url.force_encoding("utf-8")
         msg[:created] = entry.last_updated
@@ -53,18 +77,12 @@ Plugin.create(:mikutter_datasource_rss) {
         entry_content = entry.content.force_encoding("utf-8") 
         entry_text = description + entry_content
 
-        # 画像 URL 抽出
-        media_url = entry_text.scan(/(<img.*?src=\")(.*?)(\".*?>)/)
-        media_url = media_url.collect { |matched|
-          matched[1]
-        }
-
         # media 作成
-        media = []
-        media_url.each_with_index { |url, i|
-          media.push({:media_url => url, :indices=>[i,0]})
-        }
-        media.uniq!
+        if UserConfig["#{RSS_SHOW_IMAGE}_#{@url}".to_sym] then
+          media = get_media(entry_text)
+        else
+          media = []
+        end
 
         # Entity 追加
         msg[:entities] = {:urls => [], :media => media}
@@ -149,6 +167,31 @@ Plugin.create(:mikutter_datasource_rss) {
         puts e.backtrace
       end
     end
+
+    def get_media(media_text)
+      # 最大画像数が 0 なら空 media を返却
+      max_num = UserConfig["#{RSS_MAX_IMAGE_NUM}_#{@url}".to_sym]
+      if max_num == 0 then return [] end
+
+      # media_text から画像 URL 抽出
+      media_url = media_text.scan(/(<img.*?src=\")(.*?)(\".*?>)/)
+      media_url = media_url.collect { |matched|
+        matched[1]
+      }
+
+      # media 作成
+      media = []
+      media_url.each_with_index { |url, i|
+        media.push({:media_url => url, :indices=>[i,0]})
+      }
+      media.uniq!
+      media[0..max_num - 1]
+    end
+
+    def add_message(src_text, additional_text)
+      if src_text == "" then return additional_text end
+      return "#{src_text}\n#{additional_text}"
+    end
   end
 
 
@@ -182,6 +225,15 @@ Plugin.create(:mikutter_datasource_rss) {
         UserConfig["#{RSS_REVERSE}_#{i}".to_sym] ||= false
         UserConfig["#{RSS_ICON}_#{i}".to_sym] ||= :black
 
+        # テキストについて
+        init_bool(UserConfig["#{RSS_SHOW_FEED_TITLE}_#{i}".to_sym], true)
+        init_bool(UserConfig["#{RSS_SHOW_ENTRY_TITLE}_#{i}".to_sym], true)
+        init_bool(UserConfig["#{RSS_SHOW_ENTRY_DESCRIPTION}_#{i}".to_sym], true)
+
+        # 画像について
+        init_bool(UserConfig["#{RSS_SHOW_IMAGE}_#{i}".to_sym], true)
+        init_bool(UserConfig["#{RSS_MAX_IMAGE_NUM}_#{i}".to_sym], 256)
+
         FetchLooper.new(i).start
       }
     rescue => e
@@ -205,6 +257,12 @@ Plugin.create(:mikutter_datasource_rss) {
               adjustment("一定期間より前のフィードは流さない（日）", get_sym(RSS_DROP_DAY, i), 1, 365)
               boolean("新しい記事を優先する", get_sym(RSS_REVERSE, i))
               boolean("ループさせる", get_sym(RSS_IS_LOOP, i))
+              boolean("フィードタイトルを表示", get_sym(RSS_SHOW_FEED_TITLE, i))
+              boolean("エントリタイトルを表示", get_sym(RSS_SHOW_ENTRY_TITLE, i))
+              boolean("内容を表示", get_sym(RSS_SHOW_ENTRY_DESCRIPTION, i))
+              boolean("画像を表示", get_sym(RSS_SHOW_IMAGE, i))
+              # 最大値はなんとなく
+              adjustment("最大表示画像数", get_sym(RSS_MAX_IMAGE_NUM, i), 1, 256)
 
               select("アイコンの色", get_sym(RSS_ICON, i), ICON_COLORS.inject({}){ |result, kv|
                 result[kv[0]] = kv[1][0]
@@ -221,6 +279,12 @@ Plugin.create(:mikutter_datasource_rss) {
 
   def get_sym(setting, index)
     return "#{setting}_#{UserConfig[:datasource_rss_url][index]}".to_sym
+  end
+
+  def init_bool(config, default)
+    if config == nil then
+      config = default
+    end
   end
 
   # リンクの処理
