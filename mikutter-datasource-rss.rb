@@ -217,23 +217,9 @@ Plugin.create(:mikutter_datasource_rss) {
     begin
       UserConfig[:datasource_rss_url] ||= []
 
+      init_config
+
       UserConfig[:datasource_rss_url].each { |i|
-        UserConfig["#{RSS_PERIOD}_#{i}".to_sym] ||= 1 * 60
-        UserConfig["#{RSS_LOAD_PERIOD}_#{i}".to_sym] ||= 1 * 60
-        UserConfig["#{RSS_IS_LOOP}_#{i}".to_sym] ||= false
-        UserConfig["#{RSS_DROP_DAY}_#{i}".to_sym] ||= 30
-        UserConfig["#{RSS_REVERSE}_#{i}".to_sym] ||= false
-        UserConfig["#{RSS_ICON}_#{i}".to_sym] ||= :black
-
-        # テキストについて
-        init_bool(UserConfig["#{RSS_SHOW_FEED_TITLE}_#{i}".to_sym], true)
-        init_bool(UserConfig["#{RSS_SHOW_ENTRY_TITLE}_#{i}".to_sym], true)
-        init_bool(UserConfig["#{RSS_SHOW_ENTRY_DESCRIPTION}_#{i}".to_sym], true)
-
-        # 画像について
-        init_bool(UserConfig["#{RSS_SHOW_IMAGE}_#{i}".to_sym], true)
-        init_bool(UserConfig["#{RSS_MAX_IMAGE_NUM}_#{i}".to_sym], 256)
-
         FetchLooper.new(i).start
       }
     rescue => e
@@ -250,7 +236,12 @@ Plugin.create(:mikutter_datasource_rss) {
           multi("Feed URL(追加、削除を行ったら設定画面を開き直してください)", :datasource_rss_url)
         }
         settings("フィード設定") {
+
+          # 設定初期化
+          init_config
+
           UserConfig[:datasource_rss_url].each_with_index { |url, i|
+
             settings(url) {
               adjustment("RSS取得間隔（秒）", get_sym(RSS_LOAD_PERIOD, i), 1, 600)
               adjustment("メッセージ出力間隔（秒）", get_sym(RSS_PERIOD, i), 1, 600)
@@ -279,6 +270,28 @@ Plugin.create(:mikutter_datasource_rss) {
 
   def get_sym(setting, index)
     return "#{setting}_#{UserConfig[:datasource_rss_url][index]}".to_sym
+  end
+
+  def init_config()
+    UserConfig[:datasource_rss_url].each_with_index { |url, i|
+      # 設定初期化
+      UserConfig["#{RSS_PERIOD}_#{url}".to_sym] ||= 1 * 60
+      UserConfig["#{RSS_LOAD_PERIOD}_#{url}".to_sym] ||= 1 * 60
+      UserConfig["#{RSS_IS_LOOP}_#{url}".to_sym] ||= false
+      UserConfig["#{RSS_DROP_DAY}_#{url}".to_sym] ||= 30
+      UserConfig["#{RSS_REVERSE}_#{url}".to_sym] ||= false
+      UserConfig["#{RSS_ICON}_#{url}".to_sym] ||= :black
+
+      # テキストについて
+      init_bool(UserConfig["#{RSS_SHOW_FEED_TITLE}_#{url}".to_sym], true)
+      init_bool(UserConfig["#{RSS_SHOW_ENTRY_TITLE}_#{url}".to_sym], true)
+      init_bool(UserConfig["#{RSS_SHOW_ENTRY_DESCRIPTION}_#{url}".to_sym], true)
+
+      # 画像について
+      init_bool(UserConfig["#{RSS_SHOW_IMAGE}_#{url}".to_sym], true)
+      UserConfig["#{RSS_MAX_IMAGE_NUM}_#{url}".to_sym] ||= 256
+
+    }
   end
 
   def init_bool(config, default)
