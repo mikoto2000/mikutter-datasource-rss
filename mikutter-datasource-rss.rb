@@ -62,7 +62,7 @@ Plugin.create(:mikutter_datasource_rss) {
         end
 
         # 内容表示する？
-        if @config[RSS_SHOW_ENTRY_TITLE] then
+        if @config[RSS_SHOW_ENTRY_DESCRIPTION] then
           text = add_message(text, description)
         end
 
