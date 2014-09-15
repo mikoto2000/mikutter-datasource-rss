@@ -20,18 +20,18 @@ Plugin.create(:mikutter_datasource_rss) {
     :mikutter => ["みくったーちゃん", MUI::Skin.get("icon.png")],
   }
 
-  RSS_URL = "datasource_rss_url"
-  RSS_LOAD_PERIOD = "datasource_rss_load_period"
-  RSS_PERIOD = "datasource_rss_period"
-  RSS_DROP_DAY = "datasource_rss_drop_day"
-  RSS_REVERSE = "datasource_rss_reverse"
-  RSS_IS_LOOP = "datasource_rss_loop"
-  RSS_ICON = "datasource_rss_icon"
-  RSS_SHOW_FEED_TITLE = "datasource_rss_show_feed_title"
-  RSS_SHOW_ENTRY_TITLE = "datasource_rss_show_entry_title"
-  RSS_SHOW_ENTRY_DESCRIPTION = "datasource_rss_show_entry_description"
-  RSS_SHOW_IMAGE, = "datasource_rss_show_image"
-  RSS_MAX_IMAGE_NUM = "datasource_rss_max_image_num"
+  RSS_URL = :datasource_rss_url
+  RSS_LOAD_PERIOD = :datasource_rss_load_period
+  RSS_PERIOD = :datasource_rss_period
+  RSS_DROP_DAY = :datasource_rss_drop_day
+  RSS_REVERSE = :datasource_rss_reverse
+  RSS_IS_LOOP = :datasource_rss_loop
+  RSS_ICON = :datasource_rss_icon
+  RSS_SHOW_FEED_TITLE = :datasource_rss_show_feed_title
+  RSS_SHOW_ENTRY_TITLE = :datasource_rss_show_entry_title
+  RSS_SHOW_ENTRY_DESCRIPTION = :datasource_rss_show_entry_description
+  RSS_SHOW_IMAGE, = :datasource_rss_show_image
+  RSS_MAX_IMAGE_NUM = :datasource_rss_max_image_num
 
   class FetchLooper < Looper
     def initialize(config)
@@ -90,7 +90,7 @@ Plugin.create(:mikutter_datasource_rss) {
 
         # ユーザ
         image_url = if feed.image.empty?
-          ICON_COLORS[@config[RSS_ICON]][1]
+          ICON_COLORS[UserConfig[RSS_ICON]][1]
         else
           feed.image
         end
@@ -245,6 +245,11 @@ Plugin.create(:mikutter_datasource_rss) {
     begin
         settings("基本設定") {
           multi("Feed URL(追加、削除を行ったら設定画面を開き直してください)", :datasource_rss_url)
+          select("アイコンの色", RSS_ICON, ICON_COLORS.inject({}){ |result, kv|
+            result[kv[0]] = kv[1][0]
+            result
+          })
+
         }
         settings("フィード設定") {
 
@@ -268,10 +273,6 @@ Plugin.create(:mikutter_datasource_rss) {
               # 最大値はなんとなく
               adjustment("最大表示画像数", listener(url, RSS_MAX_IMAGE_NUM), 1, 256)
 
-              select("アイコンの色", listener(url, RSS_ICON), ICON_COLORS.inject({}){ |result, kv|
-                result[kv[0]] = kv[1][0]
-                result
-              })
             }
           }
         }
@@ -304,7 +305,6 @@ Plugin.create(:mikutter_datasource_rss) {
       feed_config[RSS_IS_LOOP] ||= false
       feed_config[RSS_DROP_DAY] ||= 30
       feed_config[RSS_REVERSE] ||= false
-      feed_config[RSS_ICON] ||= :black
 
       # テキストについて
       set_default_value(feed_config, RSS_SHOW_FEED_TITLE, true)
@@ -317,6 +317,8 @@ Plugin.create(:mikutter_datasource_rss) {
 
       config[url] = feed_config
     }
+
+    UserConfig[RSS_ICON] ||= :black
 
     UserConfig[:datasource_rss_config] = config
   end
