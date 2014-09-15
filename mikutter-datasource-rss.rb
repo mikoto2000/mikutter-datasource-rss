@@ -247,7 +247,7 @@ Plugin.create(:mikutter_datasource_rss) {
             settings(url) {
               config = (UserConfig[:datasource_rss_config])[url].melt
 
-              adjustment("RSS取得間隔（秒）", listener(url, RSS_PERIOD), 1, 600)
+              adjustment("RSS取得間隔（秒）", listener(url, RSS_LOAD_PERIOD), 1, 600)
               adjustment("メッセージ出力間隔（秒）", listener(url, RSS_PERIOD), 1, 600)
               adjustment("一定期間より前のフィードは流さない（日）", listener(url, RSS_DROP_DAY), 1, 365)
               boolean("新しい記事を優先する", listener(url, RSS_REVERSE))
