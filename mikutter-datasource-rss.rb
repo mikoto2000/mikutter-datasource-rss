@@ -120,18 +120,20 @@ Plugin.create(:mikutter_datasource_rss) {
         notice("#{@config[RSS_URL]} proc start")
 
         # パラメータ変更確認
-        args = [@config[RSS_URL],
-                @config[RSS_IS_LOOP],
-                @config[RSS_DROP_DAY],
-                @config[RSS_REVERSE]]
+        new_config = UserConfig[:datasource_rss_config][@config[RSS_URL]]
 
         # パラメータが変わっていた場合、取得オブジェクトを再生成
-        if !args[0].empty? && (@prev_args != args)
+        if !@fetcher || @config != new_config
           notice("#{@config[RSS_URL]} proc reload")
 
-          @prev_args = args
+          @config = new_config
 
-          @fetcher = RSSFetcher.new(*args, lambda { |*args| create_message(@url, *args) })
+          @fetcher = RSSFetcher.new(
+            @config[RSS_URL],
+            @config[RSS_IS_LOOP],
+            @config[RSS_DROP_DAY],
+            @config[RSS_REVERSE],
+            lambda { |*args| create_message(@url, *args) })
           @load_counter = 0
         end
 
@@ -216,18 +218,25 @@ Plugin.create(:mikutter_datasource_rss) {
   # 起動時
   on_boot { |service|
     begin
+      # 起動済みの FetchLooper を管理するためのリスト
+      @loopers = []
+
       UserConfig[:datasource_rss_url] ||= []
 
       init_config
+      init_looper
 
-      UserConfig[:datasource_rss_url].each { |i|
-        config = UserConfig[:datasource_rss_config]
-        FetchLooper.new(config[i]).start
-      }
     rescue => e
       puts e.to_s
       puts e.backtrace
     end
+  }
+
+  # 毎分 UserConfig と Looper チェックアンドリビルド。
+  # 差分だけ更新したいね。
+  on_period() {
+    init_config
+    init_looper
   }
 
 
@@ -310,6 +319,23 @@ Plugin.create(:mikutter_datasource_rss) {
     }
 
     UserConfig[:datasource_rss_config] = config
+  end
+
+  # 設定を再読込して、 Looper を作っていない
+  # URL が存在すれば新規作成する.
+  def init_looper()
+    UserConfig[:datasource_rss_url].each { |url|
+      # p "Check Looper(#{url})."
+      if @loopers.include? url then
+          # p "Exists Looper(#{url})."
+          next
+      end
+
+      # p "Not exist Looper(#{url})."
+      config = UserConfig[:datasource_rss_config]
+      @loopers.push(url)
+      FetchLooper.new(config[url]).start
+    }
   end
 
   def set_default_value(config, key, default)
