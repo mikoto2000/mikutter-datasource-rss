@@ -214,7 +214,6 @@ Plugin.create(:mikutter_datasource_rss) {
     end
   }
 
-
   # 起動時
   on_boot { |service|
     begin
@@ -226,24 +225,27 @@ Plugin.create(:mikutter_datasource_rss) {
       init_config
       init_looper
 
+      UserConfig.connect(:datasource_rss_config) do
+        init_config
+        init_looper
+      end
+
+      UserConfig.connect(:datasource_rss_url) do
+        init_config
+        init_looper
+      end
+
     rescue => e
       puts e.to_s
       puts e.backtrace
     end
   }
 
-  # 毎分 UserConfig と Looper チェックアンドリビルド。
-  # 差分だけ更新したいね。
-  on_period() {
-    init_config
-    init_looper
-  }
-
-
   # 設定
   settings("RSS") {
     begin
         settings("基本設定") {
+
           multi("Feed URL(追加、削除を行ったら設定画面を開き直してください)", :datasource_rss_url)
           select("アイコンの色", RSS_ICON, ICON_COLORS.inject({}){ |result, kv|
             result[kv[0]] = kv[1][0]
@@ -259,7 +261,6 @@ Plugin.create(:mikutter_datasource_rss) {
           UserConfig[:datasource_rss_url].each_with_index { |url, i|
 
             settings(url) {
-              config = (UserConfig[:datasource_rss_config])[url].melt
 
               adjustment("RSS取得間隔（秒）", listener(url, RSS_LOAD_PERIOD), 1, 600)
               adjustment("メッセージ出力間隔（秒）", listener(url, RSS_PERIOD), 1, 600)
@@ -320,7 +321,10 @@ Plugin.create(:mikutter_datasource_rss) {
 
     UserConfig[RSS_ICON] ||= :black
 
-    UserConfig[:datasource_rss_config] = config
+    # config に更新がかかっていたら入れ替える
+    unless UserConfig[:datasource_rss_config] == config then
+      UserConfig[:datasource_rss_config] == config
+    end
   end
 
   # 設定を再読込して、 Looper を作っていない
