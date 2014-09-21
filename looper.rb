@@ -9,6 +9,10 @@ class Looper
 
 
   def start
+    if @stop
+      return
+    end
+
     proc
     interval = timer_set
 
@@ -20,6 +24,9 @@ class Looper
     Reserver.new(interval) { start }
   end
 
+  def stop
+    @stop = true
+  end
 
   def stop?
     @stop

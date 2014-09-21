@@ -118,6 +118,7 @@ Plugin.create(:mikutter_datasource_rss) {
     def proc
       begin
         notice("#{@config[RSS_URL]} proc start")
+        #p "#{@config[RSS_URL]} proc start"
 
         # パラメータ変更確認
         new_config = UserConfig[:datasource_rss_config][@config[RSS_URL]]
@@ -218,21 +219,21 @@ Plugin.create(:mikutter_datasource_rss) {
   on_boot { |service|
     begin
       # 起動済みの FetchLooper を管理するためのリスト
-      @loopers = []
+      @fetchers = {}
 
       UserConfig[:datasource_rss_url] ||= []
+      config = UserConfig[:datasource_rss_url]
+      init_config config
+      init_looper config
 
-      init_config
-      init_looper
-
-      UserConfig.connect(:datasource_rss_config) do
-        init_config
-        init_looper
+      UserConfig.connect(:datasource_rss_config) do |key, new|
+        init_config new
+        init_looper new
       end
 
-      UserConfig.connect(:datasource_rss_url) do
-        init_config
-        init_looper
+      UserConfig.connect(:datasource_rss_url) do |key, new|
+        init_config new
+        init_looper new
       end
 
     rescue => e
@@ -256,7 +257,7 @@ Plugin.create(:mikutter_datasource_rss) {
         settings("フィード設定") {
 
           # 設定初期化
-          init_config
+          init_config UserConfig[:datasource_rss_url]
 
           UserConfig[:datasource_rss_url].each_with_index { |url, i|
 
@@ -287,13 +288,17 @@ Plugin.create(:mikutter_datasource_rss) {
     return "#{setting}_#{UserConfig[:datasource_rss_url][index]}".to_sym
   end
 
-  def init_config()
+  def init_config(urls)
     # 空なら新規作成
     UserConfig[:datasource_rss_config] ||= {}
     config = UserConfig[:datasource_rss_config].melt
 
     # フィード毎の設定を確認、設定する
-    UserConfig[:datasource_rss_url].each_with_index { |url, i|
+    urls.each_with_index { |url, i|
+      # 空は無視する
+      if url == "" then
+        next
+      end
 
       # フィード毎の設定
       config[url] ||= {}
@@ -329,18 +334,37 @@ Plugin.create(:mikutter_datasource_rss) {
 
   # 設定を再読込して、 Looper を作っていない
   # URL が存在すれば新規作成する.
-  def init_looper()
-    UserConfig[:datasource_rss_url].each { |url|
-      # p "Check Looper(#{url})."
-      if @loopers.include? url then
+  def init_looper(urls)
+    urls.each { |url|
+      # 空は無視する
+      if url == "" then
+        next
+      end
+
+      #p "Check Looper(#{url})."
+      if @fetchers[url] || @fetchers[url] == "" then
           # p "Exists Looper(#{url})."
           next
       end
 
-      # p "Not exist Looper(#{url})."
+      #p "Not exist Looper(#{url})."
       config = UserConfig[:datasource_rss_config]
-      @loopers.push(url)
-      FetchLooper.new(config[url]).start
+      fetcher = FetchLooper.new(config[url])
+      fetcher.start
+      @fetchers[url] = fetcher
+    }
+
+    (UserConfig[:datasource_rss_url] - urls).each { |url|
+      # 空は無視する
+      if url == "" then
+        next
+      end
+      #p "remove #{url}"
+      fetcher = @fetchers[url]
+      #p "stop fetcher #{url}"
+      fetcher.stop
+      #p "delete in fetchers"
+      @fetchers.delete(url)
     }
   end
 
