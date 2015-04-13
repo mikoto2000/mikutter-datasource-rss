@@ -75,7 +75,7 @@ Plugin.create(:mikutter_datasource_rss) {
         msg[:modified] = Time.now
 
         # フィードの content と description から URL を抽出
-        entry_content = entry.content.force_encoding("utf-8") 
+        entry_content = entry.content.force_encoding("utf-8")
         entry_text = description + entry_content
 
         # media 作成
@@ -87,6 +87,7 @@ Plugin.create(:mikutter_datasource_rss) {
 
         # Entity 追加
         msg[:entities] = {:urls => [], :media => media}
+        msg[:extended_entities] = {:media => media}
 
         # ユーザ
         image_url = if feed.image.empty?
